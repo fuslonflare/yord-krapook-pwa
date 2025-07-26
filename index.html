@@ -572,6 +572,10 @@
 
 
 <script>
+  // *** สำคัญ: โปรดเปลี่ยนค่านี้ให้เป็น URL ของ Google App Script Web App ที่คุณ Deploy ไว้ ***
+  // คุณสามารถหา URL นี้ได้จากการ Deploy App Script (Deploy > New deployment > Web app)
+  const APP_SCRIPT_WEB_APP_URL = 'https://script.google.com/macros/s/AKfycbydBAsxKddQU8hix48IqgUn7G6zhi4qPy62j_Tf1XowTWhgxXt6SOcCBbFAZFEDmE8eFw/exec';
+
   // Helper function to show loading overlay
   function showLoading() {
     document.getElementById('loadingOverlay').classList.remove('hidden');
@@ -613,6 +617,38 @@
   let allTransactions = [];
   let currentCalendarDate = new Date(); // For Overview calendar
 
+  // --- API Call Helper ---
+  async function callAppScript(functionName, args = []) {
+    try {
+      const response = await fetch(APP_SCRIPT_WEB_APP_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          function: functionName,
+          args: args
+        })
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, message: ${errorText}`);
+      }
+
+      const result = await response.json();
+
+      if (result.success) {
+        return result.data;
+      } else {
+        throw new Error(result.error || 'Unknown error from App Script.');
+      }
+    } catch (error) {
+      console.error('Error calling App Script function:', functionName, error);
+      throw error; // Re-throw to be caught by the specific handler
+    }
+  }
+
   // --- Utility Functions ---
   function formatDate(dateString) {
     const date = new Date(dateString);
@@ -637,11 +673,11 @@
     showLoading();
     try {
       [allWallets, allCategories, allTags, allCurrencies, allTransactions] = await Promise.all([
-        google.script.run.withFailureHandler(handleError).getWallets(),
-        google.script.run.withFailureHandler(handleError).getCategories(),
-        google.script.run.withFailureHandler(handleError).getTags(),
-        google.script.run.withFailureHandler(handleError).getCurrencies(),
-        google.script.run.withFailureHandler(handleError).getTransactions()
+        callAppScript('getWallets'),
+        callAppScript('getCategories'),
+        callAppScript('getTags'),
+        callAppScript('getCurrencies'),
+        callAppScript('getTransactions')
       ]);
       console.log('All data loaded:', { allWallets, allCategories, allTags, allCurrencies, allTransactions });
       renderWallets();
@@ -697,18 +733,14 @@
 
     try {
       if (walletIdInput.value) {
-        await google.script.run.withSuccessHandler(() => {
-          showMessage('สำเร็จ', 'อัปเดตกระเป๋าเรียบร้อยแล้ว');
-          resetWalletForm();
-          loadAllData();
-        }).withFailureHandler(handleError).updateWallet(walletIdInput.value, walletData);
+        await callAppScript('updateWallet', [walletIdInput.value, walletData]);
+        showMessage('สำเร็จ', 'อัปเดตกระเป๋าเรียบร้อยแล้ว');
       } else {
-        await google.script.run.withSuccessHandler(() => {
-          showMessage('สำเร็จ', 'เพิ่มกระเป๋าเรียบร้อยแล้ว');
-          resetWalletForm();
-          loadAllData();
-        }).withFailureHandler(handleError).addWallet(walletData);
+        await callAppScript('addWallet', [walletData]);
+        showMessage('สำเร็จ', 'เพิ่มกระเป๋าเรียบร้อยแล้ว');
       }
+      resetWalletForm();
+      loadAllData();
     } catch (error) {
       handleError(error);
     } finally {
@@ -793,10 +825,9 @@
     showConfirmation('คุณแน่ใจหรือไม่ที่ต้องการลบกระเป๋านี้? (หากมีธุรกรรมที่เกี่ยวข้องจะไม่สามารถลบได้)', async () => {
       showLoading();
       try {
-        await google.script.run.withSuccessHandler(() => {
-          showMessage('สำเร็จ', 'ลบกระเป๋าเรียบร้อยแล้ว');
-          loadAllData();
-        }).withFailureHandler(handleError).deleteWallet(id);
+        await callAppScript('deleteWallet', [id]);
+        showMessage('สำเร็จ', 'ลบกระเป๋าเรียบร้อยแล้ว');
+        loadAllData();
       } catch (error) {
         handleError(error);
       } finally {
@@ -833,18 +864,14 @@
 
     try {
       if (categoryIdInput.value) {
-        await google.script.run.withSuccessHandler(() => {
-          showMessage('สำเร็จ', 'อัปเดตหมวดหมู่เรียบร้อยแล้ว');
-          resetCategoryForm();
-          loadAllData();
-        }).withFailureHandler(handleError).updateCategory(categoryIdInput.value, categoryData);
+        await callAppScript('updateCategory', [categoryIdInput.value, categoryData]);
+        showMessage('สำเร็จ', 'อัปเดตหมวดหมู่เรียบร้อยแล้ว');
       } else {
-        await google.script.run.withSuccessHandler(() => {
-          showMessage('สำเร็จ', 'เพิ่มหมวดหมู่เรียบร้อยแล้ว');
-          resetCategoryForm();
-          loadAllData();
-        }).withFailureHandler(handleError).addCategory(categoryData);
+        await callAppScript('addCategory', [categoryData]);
+        showMessage('สำเร็จ', 'เพิ่มหมวดหมู่เรียบร้อยแล้ว');
       }
+      resetCategoryForm();
+      loadAllData();
     } catch (error) {
       handleError(error);
     } finally {
@@ -888,6 +915,7 @@
       html += `
         <tr>
           <td>${category.Type === 'Income' ? 'รายรับ' : 'รายจ่าย'}</td>
+          <td>${category.Name}</td>
           <td><div class="color-box" style="background-color: ${category.Color};"></div></td>
           <td><i class="${category.Icon}"></i></td>
           <td>
@@ -921,10 +949,9 @@
     showConfirmation('คุณแน่ใจหรือไม่ที่ต้องการลบหมวดหมู่นี้? (หากมีธุรกรรมที่เกี่ยวข้องจะไม่สามารถลบได้)', async () => {
       showLoading();
       try {
-        await google.script.run.withSuccessHandler(() => {
-          showMessage('สำเร็จ', 'ลบหมวดหมู่เรียบร้อยแล้ว');
-          loadAllData();
-        }).withFailureHandler(handleError).deleteCategory(id);
+        await callAppScript('deleteCategory', [id]);
+        showMessage('สำเร็จ', 'ลบหมวดหมู่เรียบร้อยแล้ว');
+        loadAllData();
       } catch (error) {
         handleError(error);
       } finally {
@@ -951,18 +978,14 @@
 
     try {
       if (tagIdInput.value) {
-        await google.script.run.withSuccessHandler(() => {
-          showMessage('สำเร็จ', 'อัปเดตแท็กเรียบร้อยแล้ว');
-          resetTagForm();
-          loadAllData();
-        }).withFailureHandler(handleError).updateTag(tagIdInput.value, tagData);
+        await callAppScript('updateTag', [tagIdInput.value, tagData]);
+        showMessage('สำเร็จ', 'อัปเดตแท็กเรียบร้อยแล้ว');
       } else {
-        await google.script.run.withSuccessHandler(() => {
-          showMessage('สำเร็จ', 'เพิ่มแท็กเรียบร้อยแล้ว');
-          resetTagForm();
-          loadAllData();
-        }).withFailureHandler(handleError).addTag(tagData);
+        await callAppScript('addTag', [tagData]);
+        showMessage('สำเร็จ', 'เพิ่มแท็กเรียบร้อยแล้ว');
       }
+      resetTagForm();
+      loadAllData();
     } catch (error) {
       handleError(error);
     } finally {
@@ -1029,10 +1052,9 @@
     showConfirmation('คุณแน่ใจหรือไม่ที่ต้องการลบแท็กนี้? (หากมีธุรกรรมที่เกี่ยวข้องจะไม่สามารถลบได้)', async () => {
       showLoading();
       try {
-        await google.script.run.withSuccessHandler(() => {
-          showMessage('สำเร็จ', 'ลบแท็กเรียบร้อยแล้ว');
-          loadAllData();
-        }).withFailureHandler(handleError).deleteTag(id);
+        await callAppScript('deleteTag', [id]);
+        showMessage('สำเร็จ', 'ลบแท็กเรียบร้อยแล้ว');
+        loadAllData();
       } catch (error) {
         handleError(error);
       } finally {
@@ -1061,18 +1083,14 @@
 
     try {
       if (currencyIdInput.value) {
-        await google.script.run.withSuccessHandler(() => {
-          showMessage('สำเร็จ', 'อัปเดตอัตราแลกเปลี่ยนเรียบร้อยแล้ว');
-          resetCurrencyForm();
-          loadAllData();
-        }).withFailureHandler(handleError).updateCurrency(currencyIdInput.value, currencyData);
+        await callAppScript('updateCurrency', [currencyIdInput.value, currencyData]);
+        showMessage('สำเร็จ', 'อัปเดตอัตราแลกเปลี่ยนเรียบร้อยแล้ว');
       } else {
-        await google.script.run.withSuccessHandler(() => {
-          showMessage('สำเร็จ', 'เพิ่มอัตราแลกเปลี่ยนเรียบร้อยแล้ว');
-          resetCurrencyForm();
-          loadAllData();
-        }).withFailureHandler(handleError).addCurrency(currencyData);
+        await callAppScript('addCurrency', [currencyData]);
+        showMessage('สำเร็จ', 'เพิ่มอัตราแลกเปลี่ยนเรียบร้อยแล้ว');
       }
+      resetCurrencyForm();
+      loadAllData();
     } catch (error) {
       handleError(error);
     } finally {
@@ -1143,10 +1161,9 @@
     showConfirmation('คุณแน่ใจหรือไม่ที่ต้องการลบอัตราแลกเปลี่ยนนี้?', async () => {
       showLoading();
       try {
-        await google.script.run.withSuccessHandler(() => {
-          showMessage('สำเร็จ', 'ลบอัตราแลกเปลี่ยนเรียบร้อยแล้ว');
-          loadAllData();
-        }).withFailureHandler(handleError).deleteCurrency(id);
+        await callAppScript('deleteCurrency', [id]);
+        showMessage('สำเร็จ', 'ลบอัตราแลกเปลี่ยนเรียบร้อยแล้ว');
+        loadAllData();
       } catch (error) {
         handleError(error);
       } finally {
@@ -1229,7 +1246,7 @@
 
       showLoading();
       try {
-        const newTag = await google.script.run.withFailureHandler(handleError).addTag({ Name: newTagName, Color: '#6c757d' }); // Default color
+        const newTag = await callAppScript('addTag', [{ Name: newTagName, Color: '#6c757d' }]); // Default color
         allTags.push(newTag); // Update local cache
         populateTagsDropdown(); // Re-populate dropdown
         // Select the newly added tag
@@ -1332,7 +1349,7 @@
           reader.onerror = error => reject(error);
           reader.readAsDataURL(file);
         });
-        const fileId = await google.script.run.withFailureHandler(handleError).uploadImageToDrive(base64Data, file.name);
+        const fileId = await callAppScript('uploadImageToDrive', [base64Data, file.name]);
         newImageIds.push(fileId);
       } catch (error) {
         handleError(error);
@@ -1344,18 +1361,14 @@
 
     try {
       if (transactionIdInput.value) {
-        await google.script.run.withSuccessHandler(() => {
-          showMessage('สำเร็จ', 'อัปเดตธุรกรรมเรียบร้อยแล้ว');
-          resetTransactionForm();
-          loadAllData();
-        }).withFailureHandler(handleError).updateTransaction(transactionIdInput.value, transactionData);
+        await callAppScript('updateTransaction', [transactionIdInput.value, transactionData]);
+        showMessage('สำเร็จ', 'อัปเดตธุรกรรมเรียบร้อยแล้ว');
       } else {
-        await google.script.run.withSuccessHandler(() => {
-          showMessage('สำเร็จ', 'เพิ่มธุรกรรมเรียบร้อยแล้ว');
-          resetTransactionForm();
-          loadAllData();
-        }).withFailureHandler(handleError).addTransaction(transactionData);
+        await callAppScript('addTransaction', [transactionData]);
+        showMessage('สำเร็จ', 'เพิ่มธุรกรรมเรียบร้อยแล้ว');
       }
+      resetTransactionForm();
+      loadAllData();
     } catch (error) {
       handleError(error);
     } finally {
@@ -1429,7 +1442,7 @@
   async function loadRecentItemNames() {
     showLoading();
     try {
-      const recentNames = await google.script.run.withFailureHandler(handleError).getRecentItemNames();
+      const recentNames = await callAppScript('getRecentItemNames');
       recentItemNamesDatalist.innerHTML = '';
       recentNames.forEach(name => {
         recentItemNamesDatalist.innerHTML += `<option value="${name}">`;
@@ -1593,10 +1606,9 @@
     showConfirmation('คุณแน่ใจหรือไม่ที่ต้องการลบรายการธุรกรรมนี้?', async () => {
       showLoading();
       try {
-        await google.script.run.withSuccessHandler(() => {
-          showMessage('สำเร็จ', 'ลบรายการธุรกรรมเรียบร้อยแล้ว');
-          loadAllData();
-        }).withFailureHandler(handleError).deleteTransaction(id);
+        await callAppScript('deleteTransaction', [id]);
+        showMessage('สำเร็จ', 'ลบรายการธุรกรรมเรียบร้อยแล้ว');
+        loadAllData();
       } catch (error) {
         handleError(error);
       } finally {
@@ -1668,7 +1680,7 @@
     };
 
     try {
-      const searchResults = await google.script.run.withFailureHandler(handleError).searchTransactions(filters);
+      const searchResults = await callAppScript('searchTransactions', [filters]);
       renderTransactions(searchResults);
     } catch (error) {
       handleError(error);
@@ -1723,7 +1735,7 @@
       const year = currentCalendarDate.getFullYear();
       const month = currentCalendarDate.getMonth(); // 0-11
 
-      const overviewData = await google.script.run.withFailureHandler(handleError).getOverviewData(selectedWalletId, year, month);
+      const overviewData = await callAppScript('getOverviewData', [selectedWalletId, year, month]);
       console.log('Overview Data:', overviewData);
 
       // Update summaryByType buttons
@@ -1859,7 +1871,7 @@
   async function showDailyTransactions(dateString, filterWalletId) {
     showLoading();
     try {
-      const transactions = await google.script.run.withFailureHandler(handleError).getTransactionsForDate(dateString, filterWalletId);
+      const transactions = await callAppScript('getTransactionsForDate', [dateString, filterWalletId]);
       dailyTransactionsDateElem.innerText = new Date(dateString).toLocaleDateString('th-TH', { year: 'numeric', month: 'long', day: 'numeric' });
       dailyTransactionsListElem.innerHTML = '';
 
@@ -1924,12 +1936,15 @@
   // --- Initial Load ---
   // Ensure google.script.run is available before calling
   window.addEventListener('load', () => {
-    if (typeof google !== 'undefined' && google.script && google.script.run) {
-      loadAllData();
-    } else {
-      showMessage('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อกับ Google App Script ได้ โปรดตรวจสอบการตั้งค่าการปรับใช้ หรือคุณอาจกำลังเรียกใช้จาก Google Sites ซึ่งไม่รองรับ PWA');
+    // We no longer rely on google.script.run directly from the frontend
+    // The check below is for when the script is run in a Google Apps Script environment (e.g., for testing)
+    // For the PWA on GitHub Pages, APP_SCRIPT_WEB_APP_URL must be set correctly.
+    if (APP_SCRIPT_WEB_APP_URL === 'YOUR_WEB_APP_URL_HERE' || !APP_SCRIPT_WEB_APP_URL) {
+      showMessage('ข้อผิดพลาด', 'โปรดตั้งค่า APP_SCRIPT_WEB_APP_URL ในโค้ด frontend.html ก่อนใช้งาน');
       hideLoading();
+      return;
     }
+    loadAllData();
 
     // Register Service Worker for PWA capabilities
     if ('serviceWorker' in navigator) {
