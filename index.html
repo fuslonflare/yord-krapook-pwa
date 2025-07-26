@@ -11,17 +11,17 @@
   <h1>Welcome, world</h1>
   <script>
     const APP_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxtevOmkHJQZfAJYkIMwvh7pTY5eQcb6UJGTkpwZkSZrYPfuwO-bIDiZQovlvGCWauoPQ/exec";
-    const response = await fetch(APP_SCRIPT_WEB_APP_URL, {
+    const response = fetch(APP_SCRIPT_WEB_APP_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       }
     });
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = response.text();
       console.error(`HTTP error! status: ${response.status}, message: ${errorText}`);
     }
-    const result = await response.json();
+    const result = response.json();
     if (result.success) {
       console.log(result.data);
     } else {
